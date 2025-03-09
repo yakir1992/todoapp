@@ -49,7 +49,7 @@ const createRecurringTodos = (
         shouldAdd = true;
         break;
       case "weekly":
-        shouldAdd = format(currentDate, "EEEE") === format(start, "EEEE");
+        shouldAdd = format(currentDate, "E") === format(start, "E");
         break;
       case "monthly":
         shouldAdd = format(currentDate, "d") === format(start, "d");
@@ -63,6 +63,7 @@ const createRecurringTodos = (
           ...todo,
           id: crypto.randomUUID(),
           date: day.date,
+          recurring: { ...todo.recurring },
         },
       });
     }
@@ -228,22 +229,53 @@ export const useStore = create<TodoStore>()(
           };
         }),
 
-      updateTodoSettings: (date, todoId, updates) =>
-        set((state) => {
-          const todo = state.days
-            .find((day) => day.date === date)
+      updateTodoSettings: async (date, todoId, updates) => {
+        try {
+          set({ isLoading: true });
+
+          // Find the todo that's being updated
+          const todo = get()
+            .days.find((day) => day.date === date)
             ?.todos.find((t) => t.id === todoId);
 
-          if (!todo) return state;
+          if (!todo) {
+            set({ isLoading: false });
+            return;
+          }
 
+          // Update the todo in Firestore first
           const updatedTodo = { ...todo, ...updates };
+          await updateTodoInFirestore(todoId, updates);
+
+          // Generate recurring todos if applicable
           const recurringTodos = createRecurringTodos(
             updatedTodo,
             date,
-            state.days
+            get().days
           );
 
-          return {
+          // Add all recurring todos to Firestore
+          const recurringPromises = recurringTodos.map(
+            async ({ date, todo }) => {
+              const todoData = {
+                text: todo.text,
+                completed: todo.completed,
+                date: todo.date,
+                color: todo.color,
+                recurring: todo.recurring,
+              };
+
+              const newId = await addTodoToFirestore(todoData);
+              todo.id = newId; // Update with the real Firestore ID
+              return todo;
+            }
+          );
+
+          await Promise.all(recurringPromises);
+
+          // Update local state
+          set((state) => ({
+            isLoading: false,
             days: state.days.map((day) => {
               const recurringTodosForDay = recurringTodos.filter(
                 (rt) => rt.date === day.date
@@ -267,8 +299,12 @@ export const useStore = create<TodoStore>()(
               }
               return day;
             }),
-          };
-        }),
+          }));
+        } catch (error) {
+          console.error("Error updating todo settings:", error);
+          set({ error: "Failed to update todo settings", isLoading: false });
+        }
+      },
 
       navigateWeek: (direction) => {
         set((state) => {

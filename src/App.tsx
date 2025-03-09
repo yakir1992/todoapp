@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 import { DayColumn } from "./components/DayColumn";
+import { LoginPage } from "./components/LoginPage";
 import { useStore } from "./store";
 import {
   getAllTodos,
@@ -28,273 +34,92 @@ function App() {
     connected: false,
   });
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authError, setAuthError] = useState("");
+  const [debugExpanded, setDebugExpanded] = useState<boolean>(false);
 
   // Check auth state
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
-      console.log("Auth state changed:", user ? user.email : "Not logged in");
+      console.log("Auth state changed:", user ? "Logged in" : "Logged out");
       setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
 
-  // Test database connection on mount
+      // If user just logged in, fetch todos
+      if (user) {
+        fetchTodos();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [fetchTodos]);
+
+  // Test database connection
   useEffect(() => {
     const testConnection = async () => {
-      const connected = await testDatabaseConnection();
-      setConnectionStatus({ tested: true, connected });
+      try {
+        const connected = await testDatabaseConnection();
+        setConnectionStatus({ tested: true, connected });
+      } catch (error) {
+        console.error("Error testing database connection:", error);
+        setConnectionStatus({ tested: true, connected: false });
+      }
     };
+
     testConnection();
   }, []);
 
-  useEffect(() => {
-    fetchTodos();
-  }, [fetchTodos]);
-
-  useEffect(() => {
-    console.log("Current days state:", days);
-
-    // Check each day for todos
-    days.forEach((day) => {
-      console.log(
-        `Day ${day.date} has ${day.todos.length} todos:`,
-        day.todos.map((t) => t.text).join(", ")
-      );
-    });
-  }, [days]);
-
-  // DEBUG: Add this line to directly fetch all todos on load
-  useEffect(() => {
-    const debugFetch = async () => {
-      try {
-        const allTodos = await getAllTodos();
-        console.log("DEBUG - All todos in Firestore:", allTodos);
-      } catch (e) {
-        console.error("DEBUG - Error fetching all todos:", e);
-      }
-    };
-    debugFetch();
-  }, []);
-
-  // Add a login function
-  const handleLogin = async () => {
+  // Logout handler
+  const handleLogout = async () => {
     try {
-      // Use a test account or prompt for credentials
-      await loginUser("test@example.com", "password123");
-      alert("Logged in successfully!");
+      await logoutUser();
+      // Auth state change will be caught by the onAuthChange listener
     } catch (error) {
-      console.error("Login error:", error);
-      alert("Login failed: " + error.message);
+      console.error("Error logging out:", error);
     }
   };
 
-  // Add this handler to force refresh todos
-  const forceRefresh = async () => {
-    try {
-      // Clear days first
-      useStore.setState({
-        days: generateDaysFromDate(useStore.getState().currentStartDate),
-      });
-      // Then fetch todos
-      await fetchTodos();
-      console.log("Force refreshed todos");
-    } catch (e) {
-      console.error("Force refresh error:", e);
-    }
-  };
-
-  // Add auth state change effect to trigger fetch
-  useEffect(() => {
-    if (currentUser) {
-      console.log("User logged in, fetching todos...");
-      forceRefresh();
-    }
-  }, [currentUser]);
-
-  if (isLoading && days.every((day) => day.todos.length === 0)) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 font-['Playfair_Display'] flex items-center justify-center">
-        Loading...
-      </div>
-    );
+  // If not logged in, show login page
+  if (!currentUser) {
+    return <LoginPage onLogin={(user) => setCurrentUser(user)} />;
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 font-['Playfair_Display'] flex flex-col items-center justify-center p-4">
-        <div className="max-w-lg text-center">
-          <h1 className="text-2xl text-red-500 mb-4">Error</h1>
-          <p className="mb-4">{error}</p>
-
-          {error.includes("index") && (
-            <div className="bg-gray-800 p-4 rounded mt-4 text-left">
-              <h2 className="font-bold mb-2">Firestore Index Required</h2>
-              <p className="mb-2">
-                This error occurs because Firebase Firestore needs an index for
-                the query.
-              </p>
-              <p className="mb-2">To fix this:</p>
-              <ol className="list-decimal ml-5 space-y-1">
-                <li>Find the URL in the console error message</li>
-                <li>Open that URL in a new browser tab</li>
-                <li>Click "Create index" in the Firebase console</li>
-                <li>Wait a few minutes for the index to be created</li>
-                <li>Refresh this page</li>
-              </ol>
-              <button
-                onClick={() => window.location.reload()}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mt-4"
-              >
-                Refresh Now
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
+  // Main app UI (when logged in)
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 font-['Playfair_Display']">
-      {/* Debug panel */}
-      <div className="fixed top-16 right-4 z-50 bg-black/90 p-4 rounded-lg text-xs max-w-xs overflow-auto max-h-[500px]">
-        <h3 className="font-bold mb-2">Debug Info:</h3>
-        <p className="mb-2">
-          Connection:{" "}
-          {connectionStatus.tested
-            ? connectionStatus.connected
-              ? "✅"
-              : "❌"
-            : "Testing..."}
-        </p>
-        <p className="mb-2">
-          Auth: {currentUser ? `✅ ${currentUser.email}` : "❌ Not logged in"}
-        </p>
+      {/* Minimized debug panel */}
+      <div className="fixed top-16 right-4 z-50 bg-black/90 rounded-lg text-xs overflow-hidden">
+        <button
+          onClick={() => setDebugExpanded(!debugExpanded)}
+          className="w-full flex items-center justify-between p-2 text-xs bg-gray-800 hover:bg-gray-700"
+        >
+          <span>Debug {connectionStatus.connected ? "✅" : "❌"}</span>
+          <span>{currentUser ? "Logged in" : "Not logged in"}</span>
+          {debugExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
 
-        {!currentUser ? (
-          <div className="bg-gray-800 p-3 rounded-md mb-3">
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setAuthMode("login")}
-                className={`flex-1 px-3 py-1.5 rounded text-sm ${
-                  authMode === "login"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-700 text-gray-300"
-                }`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => setAuthMode("register")}
-                className={`flex-1 px-3 py-1.5 rounded text-sm ${
-                  authMode === "register"
-                    ? "bg-green-600 text-white"
-                    : "bg-gray-700 text-gray-300"
-                }`}
-              >
-                Register
-              </button>
-            </div>
+        {debugExpanded && (
+          <div className="p-4 max-w-xs overflow-auto max-h-[500px]">
+            <h3 className="font-bold mb-2">Debug Info:</h3>
+            <p className="mb-2">
+              Connection:{" "}
+              {connectionStatus.tested
+                ? connectionStatus.connected
+                  ? "✅"
+                  : "❌"
+                : "Testing..."}
+            </p>
+            <p className="mb-2">
+              Auth:{" "}
+              {currentUser ? `✅ ${currentUser.email}` : "❌ Not logged in"}
+            </p>
 
-            {authError && (
-              <div className="bg-red-900/40 text-red-300 p-2 rounded mb-3 text-xs">
-                {authError}
-              </div>
-            )}
-
-            <input
-              type="email"
-              placeholder="Email"
-              value={authEmail}
-              onChange={(e) => setAuthEmail(e.target.value)}
-              className="w-full mb-2 px-3 py-2 bg-gray-700 rounded border border-gray-600 text-gray-100"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)}
-              className="w-full mb-3 px-3 py-2 bg-gray-700 rounded border border-gray-600 text-gray-100"
-            />
-
+            {/* Logout button */}
             <button
-              onClick={async () => {
-                try {
-                  setAuthError("");
-                  if (authMode === "login") {
-                    await loginUser(authEmail, authPassword);
-                    console.log("Login successful!");
-                  } else {
-                    await registerUser(authEmail, authPassword);
-                    console.log("Registration successful!");
-                  }
-                  setAuthEmail("");
-                  setAuthPassword("");
-                } catch (e) {
-                  console.error(`${authMode} error:`, e);
-                  setAuthError(`Failed: ${e.message}`);
-                }
-              }}
-              className={`w-full font-bold py-2 rounded-md ${
-                authMode === "login"
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-blue-600 hover:bg-blue-700"
-              } text-white`}
+              onClick={handleLogout}
+              className="mt-2 w-full text-center bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-2 rounded"
             >
-              {authMode === "login" ? "Login" : "Register New Account"}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <button
-              onClick={async () => {
-                try {
-                  await logoutUser();
-                  console.log("Logout successful!");
-                } catch (e) {
-                  console.error("Logout error:", e);
-                }
-              }}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md mb-3 w-full"
-            >
-              Logout
-            </button>
-
-            <button
-              onClick={forceRefresh}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded mb-2 w-full"
-            >
-              Force Refresh
+              Log Out
             </button>
           </div>
         )}
-
-        {!currentUser && authMode === "register" && (
-          <div className="mt-2 bg-blue-900/30 p-2 rounded text-xs">
-            <p className="font-bold text-blue-300">Account Creation Guide:</p>
-            <ol className="list-decimal pl-4 mt-1 space-y-1 text-blue-200">
-              <li>Enter your email (any valid format)</li>
-              <li>Use a password at least 6 characters long</li>
-              <li>Click "Register New Account"</li>
-              <li>After registration, you'll be automatically logged in</li>
-            </ol>
-          </div>
-        )}
-
-        {/* <p className="text-xs mt-2 border-t border-gray-700 pt-2">
-          Days with todos:
-        </p>
-        <ul className="text-xs mt-1 space-y-1">
-          {days.map((day) => (
-            <li key={day.date}>
-              {day.date}: {day.todos.length} todos
-            </li>
-          ))}
-        </ul> */}
       </div>
 
       {/* Header */}
@@ -302,19 +127,35 @@ function App() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigateWeek("prev")}
-            className="hover:bg-gray-800 p-2 rounded-full transition-colors duration-200 ease-in-out"
+            className="bg-gray-800 hover:bg-gray-700 p-2 rounded"
           >
-            <ChevronLeft size={24} />
+            <ChevronLeft size={20} />
           </button>
           <button
             onClick={() => navigateWeek("next")}
-            className="hover:bg-gray-800 p-2 rounded-full transition-colors duration-200 ease-in-out"
+            className="bg-gray-800 hover:bg-gray-700 p-2 rounded"
           >
-            <ChevronRight size={24} />
+            <ChevronRight size={20} />
           </button>
         </div>
-        <h1 className="text-3xl font-light tracking-wider">Less is More</h1>
-        <div className="w-20"></div>
+
+        <h1 className="text-xl font-bold flex items-center">
+          DAILY TODO
+          <span className="text-lg font-serif text-gray-300 ml-4">
+            build, ship, learn, repeat 🚀
+          </span>
+        </h1>
+
+        {/* User profile/logout button */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">{currentUser?.email}</span>
+          <button
+            onClick={handleLogout}
+            className="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* Main content */}

@@ -72,6 +72,15 @@ export const DayColumn: React.FC<DayColumnProps> = ({
     updateTodoSettings(date, todoId, updates);
   };
 
+  const openTodoSettings = (todoId: string, event: React.MouseEvent) => {
+    if (
+      (event.target as HTMLElement).tagName.toLowerCase() !== "input" &&
+      !event.target.closest("button")
+    ) {
+      setEditingTodoId(editingTodoId === todoId ? null : todoId);
+    }
+  };
+
   const dayDate = parseISO(date);
   const dayName = format(dayDate, "EEEE").toUpperCase();
   const dayNumber = format(dayDate, "d");
@@ -126,9 +135,7 @@ export const DayColumn: React.FC<DayColumnProps> = ({
               className={`group flex items-center gap-3 hover:bg-gray-800/50 p-3 rounded-lg transition-all duration-200 cursor-pointer ${
                 todo.color || ""
               }`}
-              onClick={() =>
-                setEditingTodoId(editingTodoId === todo.id ? null : todo.id)
-              }
+              onClick={(e) => openTodoSettings(todo.id, e)}
             >
               <input
                 type="checkbox"
@@ -160,6 +167,16 @@ export const DayColumn: React.FC<DayColumnProps> = ({
               </button>
             </div>
 
+            <button
+              className="absolute right-10 top-3 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-blue-400"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingTodoId(editingTodoId === todo.id ? null : todo.id);
+              }}
+            >
+              <Settings2 size={16} />
+            </button>
+
             {editingTodoId === todo.id && (
               <div className="absolute left-0 right-0 mt-2 p-4 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-20">
                 <div className="flex justify-between items-center mb-4">
@@ -181,11 +198,12 @@ export const DayColumn: React.FC<DayColumnProps> = ({
                       {colors.map((color) => (
                         <button
                           key={color.name}
-                          onClick={() =>
+                          onClick={(e) => {
+                            e.stopPropagation();
                             handleUpdateSettings(todo.id, {
                               color: color.value,
-                            })
-                          }
+                            });
+                          }}
                           className={`w-6 h-6 rounded-full ${
                             color.value || "bg-gray-700"
                           } ${

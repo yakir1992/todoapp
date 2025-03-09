@@ -1,1 +1,9 @@
- 
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+# Redirect all requests to index.html for SPA routing
+[[redirects]]
+  from = "/todo/*"
+  to = "/todo/index.html"
+  status = 200 
