@@ -140,7 +140,7 @@ function App() {
         </div>
 
         <h1 className="text-xl font-bold flex items-center">
-          DAILY TODO
+          less is more
           <span className="text-lg font-serif text-gray-300 ml-4">
             build, ship, learn, repeat 🚀
           </span>
